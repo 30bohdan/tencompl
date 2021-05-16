@@ -3,22 +3,12 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.linear_model import LinearRegression
 
 class ML_completion:
-
-    n = (10, 10, 10)
-    rank = 0
-    num_samples = 0 
-    save_file = ""
-    randominit = 0
-    correlated = 1
-    noisy = 1
-    noise_size = 0.1
-    num_iter = 100
-    num_runs = 1
-    threshold = 10**(-6)
-
-    def __init__(self, n, rank, num_samples, save_file, randominit = True, 
-                                    correlated = False, noisy = False, noise_size = 0.1,
-                                    num_iter = 400, num_runs = 1, threshold = 10**(-6)): 
+    
+    def __init__(
+        self, n, rank, num_samples, save_file, randominit = True, 
+        correlated = False, noisy = False, noise_size = 0.1,
+        num_iter = 400, num_runs = 1, threshold = 10**(-6)
+    ): 
         self.n = n
         self.rank = rank
         self.num_samples = num_samples
@@ -30,8 +20,6 @@ class ML_completion:
         self.num_iter = num_iter
         self.num_runs = num_runs
         self.threshold = threshold
-
-
 
     def gen(self, nx, ny, nz, rank):
         coeffs = np.ones(rank)
@@ -320,6 +308,39 @@ class ML_completion:
             total_norm += np.square(true_val)
             total_error += np.square(prediction - true_val)
         return np.sqrt(total_error/total_norm)
+    
+    @staticmethod
+    def get_coeffs(V_x, V_y, V_z, x_dict, n):
+        nx, ny, nz = n
+        features = []
+        target = []
+        #Find coefficients in V_x x V_y x V_z basis
+        for x_coord in x_dict.keys():
+            for y_coord in x_dict[x_coord].keys():
+                for z_coord in x_dict[x_coord][y_coord].keys():
+                    #speed up by using less entries
+                    check = np.random.randint(10)
+                    if(check == 0):
+                        target.append(x_dict[x_coord][y_coord][z_coord])
+                        part = np.tensordot(V_x[x_coord], V_y[y_coord], axes = 0).flatten()
+                        full = np.tensordot(part, V_z[z_coord],axes = 0).flatten()
+                        features.append(full)
+        features = np.array(features)
+        target = np.array(target)
+        reg = LinearRegression(fit_intercept = False).fit(features, target)
+        solution_coeffs = reg.coef_
+        return solution_coeffs
+    
+    @staticmethod
+    def recover_frame(idx_frame, sol_coeffs, V_x, V_y, V_z, n):
+        nx, ny, nz = n
+        pred = np.empty((ny, nz), dtype=np.float32)
+        for i in range(ny):
+            for j in range(nz):
+                part = np.tensordot(V_x[idx_frame], V_y[i], axes = 0).flatten()
+                feature = np.tensordot(part, V_z[j], axes = 0).flatten()
+                pred[i, j] = np.dot(feature, sol_coeffs)
+        return pred
 
     def run(self):
         nx, ny, nz = self.n
@@ -500,10 +521,11 @@ class ML_completion:
                 print(curr_error)
                 #print('dir-err %f' % curr_error_dir)
                 error.append(curr_error)
-        all_errors.append(error)
-        to_save = np.transpose(np.array(all_errors))
-        avg_errors = np.mean(to_save, axis = 0)
-        np.savetxt(self.save_file, to_save, delimiter=",")
+#         all_errors.append(error)
+#         to_save = np.transpose(np.array(all_errors))
+#         avg_errors = np.mean(to_save, axis = 0)
+#         np.savetxt(self.save_file, to_save, delimiter=",")
+        return V_x2, V_y2, V_z2
 
 
 

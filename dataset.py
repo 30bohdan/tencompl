@@ -145,7 +145,7 @@ class Tensor(object):
         self.entries_arr =self._from_dict_to_arr()
         self.entries_list = self._from_dict_to_list()
         
-    def aul_f_sp(u, mu):
+    def aul_f_sp(self, u, mu):
         val_n = np.sum(self.x_basis**2)
         val_n += np.sum(np.sum(self.y_basis**2, axis=1) * np.sum(self.z_basis**2, axis=1))
         
@@ -158,3 +158,11 @@ class Tensor(object):
         entries_val += np.sum(tmp, axis = 1)
         val = val_n+ np.sum( (1/(2*mu))* entries_val**2-u*entries_val)        
         return (val, np.sqrt(np.sum(entries_val**2)), val_n/2)
+    
+    def update_xyz(
+        self, x_basis, y_basis, z_basis
+        
+    ):
+        self.x_basis = x_basis
+        self.y_basis = y_basis
+        self.z_basis = z_basis
