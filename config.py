@@ -48,15 +48,15 @@ experiment_configs = {
     "experiment1": generate_config(
         dataset="akiyo",
         method="Moitra-subspace-powering",
-        ranks=[5],
-        n_frames=[50],
+        ranks=[5, 8],
+        n_frames=[50, 70],
         dim_y=144,
         dim_z=176,
-        portions=[0.1],
+        portions=[0.02, 0.03, 0.05, 0.075],
         n_val_entries=10000,
         n_test_entries=10000,
-        predict_frames=[0],
-        max_iter=2
+        predict_frames=[0, 10, 20],
+        max_iter=50
     ),
 }
 

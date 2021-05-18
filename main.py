@@ -66,7 +66,7 @@ def main(experiment="experiment1", seed=13):
                     "n_test_entries": n_test_entries,
                     "predict_frames": predict_frames,
                 }
-                logger = wandb.init(project='tensor-completion', entity='y-kivva', group=method, reinit=True)
+                logger = wandb.init(project='tensor-completion', entity='tensor-completion', group=method, reinit=True)
                 logger.config.update(wandb_configs)
                 run_name =  "frames: {};dataset: {}, rank: {}, portion: {}".format(
                     dim_x, dataset_name, rank, portion
