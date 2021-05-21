@@ -55,4 +55,31 @@ def get_tensor_entries(tensor, size, seed=None):
     val = tensor[x_coords, y_coords, z_coords]
     return np.vstack((x_coords, y_coords, z_coords, val))
     
+
+def sample_triples(size, nx, ny, nz):
+    samples = np.random.choice(nx*ny*nz, size, replace=False)
+    x_coords = samples%nx
+    y_coords = ((samples - x_coords) // nx) % ny
+    z_coords = ((samples - nx*y_coords - x_coords) // (nx*ny)) % nz
+    return (x_coords, y_coords, z_coords)
+
+
+def normalize(v):
+    v_norm = v / np.linalg.norm(v)
+    return v_norm
+
+
+def orthonormalize(v, inplace=False):
+    m = len(v)
+    n = len(v[0])
     
+    if not inplace:
+        v_new = np.copy(v)
+    else:
+        v_new = v
+    
+    for i in range(m):
+        for j in range(i):
+            v_new[i] = v_new[i] - np.dot(v_new[i], v_new[j])*v_new[j]
+        v_new[i] = normalize(v_new[i])
+    return v_new

@@ -32,6 +32,8 @@ def main(experiment="experiment1", seed=13):
     dataset_name = experiment_config["dataset"]
     ranks = experiment_config["ranks"]
     portions = experiment_config["portions"]
+    noisy = experiment_config["noisy"]
+    randominit = experiment_config["randominit"]
     
     n_frames = experiment_config["n_frames"]
     dim_y = experiment_config["dim_y"]
@@ -65,6 +67,8 @@ def main(experiment="experiment1", seed=13):
                     "n_val_entries": n_val_entries,
                     "n_test_entries": n_test_entries,
                     "predict_frames": predict_frames,
+                    "noisy": noisy,
+                    "randominit": randominit,
                 }
                 logger = wandb.init(project='tensor-completion', entity='tensor-completion', group=method, reinit=True)
                 logger.config.update(wandb_configs)
@@ -78,15 +82,22 @@ def main(experiment="experiment1", seed=13):
                 val_entries = get_tensor_entries(dataset, size=n_val_entries)
                 test_entries = get_tensor_entries(dataset, size=n_test_entries)
                 
-                solver = config.methods[method]
-                solution = solver(
-                    n, rank, n_entries,
-                    max_iter, entries_arr,
-                    val_entries, test_entries, logger
+                solver = config.solvers[method]
+                #init data
+                solver = solver(
+                    n=n, rank=rank, n_entries=n_entries,
+                    entries_arr=entries_arr, noisy=noisy,
+                    randominit=randominit
                 )
                 
-                predictor = config.predictors[method]
-                pred = predictor(solution, predict_frames)
+                solution = solver.fit(
+                    test_entries=test_entries,
+                    val_entries=val_entries,
+                    logger=logger, max_iter=max_iter,
+                    lam=lambda_
+                )
+                
+                pred = solver.predict(solution, predict_frames)
                 images = []
                 for image, idx_frame in zip(pred, predict_frames):
                     images.append(wandb.Image(image, caption=f"Frame #{idx_frame}"))

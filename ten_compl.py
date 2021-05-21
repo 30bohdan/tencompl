@@ -379,9 +379,111 @@ class am:
         res_time = time.time()
         return Z
 
+    def reg_fast_update_x(X, Y, Z, n, m, u, mu, entries_a, num_entries, lam = 1.0, verbose = False):
+        entries = np.asarray(entries_a[:3, :], dtype = int)
+        entries_val = entries_a[3]
+        start_time = time.time()
+        nx, ny, nz = n
+        XT = X.T
+        for r in range(nx):
+            mask = (entries[0] == r)
+            entries_r = entries[:, mask]
+            entries_val_r = entries_val[mask]
+            num_entries_r = entries_r.shape[1]
+            num_sampl = num_entries_r+m
+            num_feat = m         
+       
+            B = np.zeros(num_sampl)
+            M_entr1 = np.sqrt(2*mu*lam)*np.eye(m)
+        
+            m_arr = np.array(range(m))
+            M_entr2 = Y[m_arr[np.newaxis,:], (entries_r[1])[:, np.newaxis]]*Z[m_arr[np.newaxis,:], (entries_r[2])[:, np.newaxis]]
+            
+        
+            B[m : ] = entries_val_r+mu*u[mask]
+            
+            M = np.vstack((M_entr1, M_entr2))
+            init_time = time.time()
+            
+            res = scipy.sparse.linalg.lsmr(M, B)
+            XT[r] = res[0]
+        res_time = time.time()
+        X = XT.T
+        if verbose:
+            print("X iteration minimization time: {}".format(res_time - init_time))
+        return X
     
+    def reg_fast_update_y(X, Y, Z, n, m, u, mu, entries_a, num_entries, lam = 1.0, verbose = False):
+        entries = np.asarray(entries_a[:3, :], dtype = int)
+        entries_val = entries_a[3]
+        start_time = time.time()
+        nx, ny, nz = n
+        YT = Y.T
+        for r in range(ny):
+            mask = (entries[1] == r)
+            entries_r = entries[:, mask]
+            entries_val_r = entries_val[mask]
+            num_entries_r = entries_r.shape[1]
+            num_sampl = num_entries_r+m
+            num_feat = m         
+       
+            B = np.zeros(num_sampl)
+            M_entr1 = np.eye(m)
+            for i in range(m):
+                M_entr1[i, i] *= np.sqrt(2*mu*lam*np.sum(Z[i]**2))
+        
+            m_arr = np.array(range(m))
+            M_entr2 = X[m_arr[np.newaxis,:], (entries_r[0])[:, np.newaxis]]*Z[m_arr[np.newaxis,:], (entries_r[2])[:, np.newaxis]]
+            
+        
+            B[m : ] = entries_val_r+mu*u[mask]
+            
+            M = np.vstack((M_entr1, M_entr2))
+            init_time = time.time()
+            
+            res = scipy.sparse.linalg.lsmr(M, B)
+            YT[r] = res[0]
+        res_time = time.time()
+        Y = YT.T
+        if verbose:
+            print("Y iteration minimization time: {}".format(res_time - init_time))
+        return Y
+        
     
-    
+    def reg_fast_update_z(X, Y, Z, n, m, u, mu, entries_a, num_entries, verbose = False, lam = 1.0):
+        entries = np.asarray(entries_a[:3, :], dtype = int)
+        entries_val = entries_a[3]
+        nx, ny, nz = n
+        ZT = Z.T
+        for r in range(nz):
+            mask = (entries[2] == r)
+            entries_r = entries[:, mask]
+            entries_val_r = entries_val[mask]
+            num_entries_r = entries_r.shape[1]
+            num_sampl = num_entries_r+m
+            num_feat = m         
+       
+            B = np.zeros(num_sampl)
+            M_entr1 = np.eye(m)
+            for i in range(m):
+                M_entr1[i, i] *= np.sqrt(2*mu*lam*np.sum(Y[i]**2))
+        
+            m_arr = np.array(range(m))
+            M_entr2 = Y[m_arr[np.newaxis,:], (entries_r[1])[:, np.newaxis]]*X[m_arr[np.newaxis,:], (entries_r[0])[:, np.newaxis]]
+            
+        
+            B[m : ] = entries_val_r+mu*u[mask]
+            
+            M = np.vstack((M_entr1, M_entr2))
+            init_time = time.time()
+            
+            res = scipy.sparse.linalg.lsmr(M, B)
+            ZT[r] = res[0]
+        res_time = time.time()
+        Z = ZT.T
+        if verbose:
+            print("Z iteration minimization time: {}".format(res_time - init_time))
+        return Z
     
     
 

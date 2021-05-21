@@ -52,6 +52,8 @@ class ML_completion:
         for a in range(self.rank):
             ans += coeffs[a] * x_vecs[a][i] * y_vecs[a][j] * z_vecs[a][k]
         return ans
+    
+    
     #sample observations, a is num_samples
     #returns 3 lists of coordinates
     def sample(self, a, nx, ny, nz):
@@ -82,10 +84,11 @@ class ML_completion:
                 x_dict[x_coords[i]][y_coords[i]] = {}
                 x_dict[x_coords[i]][y_coords[i]][z_coords[i]] = self.T(x_coords[i] , 
                                                                 y_coords[i] , z_coords[i], coeffs, x_vecs, y_vecs, z_vecs)
-    #normalize vector
+    
     def normalize(v):
         u = v/np.linalg.norm(v)
         return u
+    
     #given rxn array, output orthonormal basis
     def orthonormalize(V):
         a = len(V)
@@ -103,6 +106,7 @@ class ML_completion:
             for coord2 in M[coord1].keys():
                 u[coord1] += M[coord1][coord2] * v[coord2]
         return u
+
     #Compute initial subspace estimates
     def initialization(self, x_dict, p, r, nz):
         M_x = np.zeros((nz,nz))
