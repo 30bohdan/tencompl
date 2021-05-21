@@ -3,7 +3,6 @@ from scipy.optimize import minimize
 import time
 import matplotlib.pyplot as plt
 import sklearn.linear_model
-import cv2
 import copy
 import random
 from scipy.sparse import csr_matrix 
@@ -49,7 +48,7 @@ class am:
     def compute_nuc_approx(X, Y, Z, m):
         val = 0;
         for i in range(m):
-            val+= np.linalg.norm(X[i])*np.linalg.norm(Y[i])*np.linalg.norm(Z[i])
+            val += np.linalg.norm(X[i])*np.linalg.norm(Y[i])*np.linalg.norm(Z[i])
         return val
 
     def fix_components(X, Y, Z, n, m):
@@ -61,9 +60,9 @@ class am:
             norm_x = np.sqrt(np.sqrt(np.sum(X[i]**2)))
             norm_yz = np.sqrt(np.sqrt(np.sum(Y[i]**2)*np.sum(Z[i]**2)))
             if (norm_x>1e-8) and (norm_yz>1e-8):
-              X[i] = X[i]*(norm_yz/norm_x)
-              Y[i] = Y[i]*np.sqrt(norm_x/norm_yz)
-              Z[i] = Z[i]*np.sqrt(norm_x/norm_yz)
+                X[i] = X[i]*(norm_yz/norm_x)
+                Y[i] = Y[i]*np.sqrt(norm_x/norm_yz)
+                Z[i] = Z[i]*np.sqrt(norm_x/norm_yz)
         return (X, Y, Z)
 
     def generate_ten_entries(X, Y, Z, n, m, num, seed = None):
@@ -182,27 +181,27 @@ class am:
         return random.sample(L, num_entr)
             
 
-    def eval_error_direct(X, Y, Z, n, m, tensor, num_trials = 10000):
-        """
-        Estimate the L2 norm between the tensor given by X,Y,Z and tensor
-        """
-        nx, ny, nz = n
-        total_error = 0
-        total_norm = 0
-        for i in range(num_trials):
-            x = np.random.randint(nx)
-            y = np.random.randint(ny)
-            z = np.random.randint(nz)
-            prediction = 0
-            for j in range(m):
-                prediction += X[j, x] * Y[j, y] * Z[j, z]
-            true_val = tensor[x, y, z]
-            total_norm += np.square(true_val)
-            total_error += np.square(prediction - true_val)
-        return np.sqrt(total_error/total_norm)
+#     def eval_error_direct(X, Y, Z, n, m, tensor, num_trials = 10000):
+#         """
+#         Estimate the L2 norm between the tensor given by X,Y,Z and tensor
+#         """
+#         nx, ny, nz = n
+#         total_error = 0
+#         total_norm = 0
+#         for i in range(num_trials):
+#             x = np.random.randint(nx)
+#             y = np.random.randint(ny)
+#             z = np.random.randint(nz)
+#             prediction = 0
+#             for j in range(m):
+#                 prediction += X[j, x] * Y[j, y] * Z[j, z]
+#             true_val = tensor[x, y, z]
+#             total_norm += np.square(true_val)
+#             total_error += np.square(prediction - true_val)
+#         return np.sqrt(total_error/total_norm)
     
     
-    def eval_error_direct_fast(X, Y, Z, n, m, entries):
+    def eval_error_direct_fast(X, Y, Z, n, m, entries, full_output=False):
         nx, ny, nz = n
         total_error = 0
         total_norm = 0
@@ -210,18 +209,26 @@ class am:
         entries_i = np.asarray(entries[:3, :], dtype = int)
         ent = - entries[3]
         m_arr = np.array(range(m))
+        #entries of approx tensor from X, Y, Z
         tmp = Y[m_arr[np.newaxis, :], (entries_i[1])[:, np.newaxis]]* \
                 X[m_arr[np.newaxis, :], (entries_i[0])[:, np.newaxis]]* \
                        Z[m_arr[np.newaxis, :], (entries_i[2])[:, np.newaxis]]
-        ent += np.sum(tmp, axis = 1)
-        total_error = np.sqrt(np.sum(ent**2))
+        error = ent + np.sum(tmp, axis = 1)
+        total_error = np.sqrt(np.sum(error**2))
         total_norm = np.sqrt(np.sum(entries[3]**2))
         
-        return (total_error/total_norm)
+        rse = total_error / total_norm
+        mse = np.mean(error**2)
+        rmse = total_error / num_entries
+        psnr = 20*np.log10(np.max(np.abs(entries[-1]))) - 10*np.log10(mse)
+        
+        if not full_output: return rse
+        return rse, mse, rmse, psnr
 
     
     
     def compute_adjust_sp(X, Y, Z, n, m, mu, u, entries_a):
+        """Adjusts u vector for Lagrangian"""
         entries = np.asarray(entries_a[:3, :], dtype = int)
         entries_val = entries_a[3]
         num_entries = entries.shape[1]
@@ -429,7 +436,6 @@ class am:
         
         row = ny*m;
 
-
         M_row_ind[row:] = np.repeat(np.array(range(row, row + num_entries)), m)
         M_col_ind[row:] = np.tile(np.array(range(m))*ny, num_entries)+np.repeat(entries[1], m)
         m_arr = np.array(range(m))
@@ -493,14 +499,120 @@ class am:
         res_time = time.time()
         return Z
 
+    def reg_fast_update_x(X, Y, Z, n, m, u, mu, entries_a, num_entries, lam = 1.0, verbose = False):
+        entries = np.asarray(entries_a[:3, :], dtype = int)
+        entries_val = entries_a[3]
+        start_time = time.time()
+        nx, ny, nz = n
+        XT = X.T
+        for r in range(nx):
+            mask = (entries[0] == r)
+            entries_r = entries[:, mask]
+            entries_val_r = entries_val[mask]
+            num_entries_r = entries_r.shape[1]
+            num_sampl = num_entries_r+m
+            num_feat = m         
+       
+            B = np.zeros(num_sampl)
+            M_entr1 = np.sqrt(2*mu*lam)*np.eye(m)
+        
+            m_arr = np.array(range(m))
+            M_entr2 = Y[m_arr[np.newaxis,:], (entries_r[1])[:, np.newaxis]]*Z[m_arr[np.newaxis,:], (entries_r[2])[:, np.newaxis]]
+            
+        
+            B[m : ] = entries_val_r+mu*u[mask]
+            
+            M = np.vstack((M_entr1, M_entr2))
+            init_time = time.time()
+            
+            res = scipy.sparse.linalg.lsmr(M, B)
+            XT[r] = res[0]
+        res_time = time.time()
+        X = XT.T
+        if verbose:
+            print("X iteration minimization time: {}".format(res_time - init_time))
+        return X
     
+    def reg_fast_update_y(X, Y, Z, n, m, u, mu, entries_a, num_entries, lam = 1.0, verbose = False):
+        entries = np.asarray(entries_a[:3, :], dtype = int)
+        entries_val = entries_a[3]
+        start_time = time.time()
+        nx, ny, nz = n
+        YT = Y.T
+        for r in range(ny):
+            mask = (entries[1] == r)
+            entries_r = entries[:, mask]
+            entries_val_r = entries_val[mask]
+            num_entries_r = entries_r.shape[1]
+            num_sampl = num_entries_r+m
+            num_feat = m         
+       
+            B = np.zeros(num_sampl)
+            M_entr1 = np.eye(m)
+            for i in range(m):
+                M_entr1[i, i] *= np.sqrt(2*mu*lam*np.sum(Z[i]**2))
+        
+            m_arr = np.array(range(m))
+            M_entr2 = X[m_arr[np.newaxis,:], (entries_r[0])[:, np.newaxis]]*Z[m_arr[np.newaxis,:], (entries_r[2])[:, np.newaxis]]
+            
+        
+            B[m : ] = entries_val_r+mu*u[mask]
+            
+            M = np.vstack((M_entr1, M_entr2))
+            init_time = time.time()
+            
+            res = scipy.sparse.linalg.lsmr(M, B)
+            YT[r] = res[0]
+        res_time = time.time()
+        Y = YT.T
+        if verbose:
+            print("Y iteration minimization time: {}".format(res_time - init_time))
+        return Y
+        
     
-    
+    def reg_fast_update_z(X, Y, Z, n, m, u, mu, entries_a, num_entries, verbose = False, lam = 1.0):
+        entries = np.asarray(entries_a[:3, :], dtype = int)
+        entries_val = entries_a[3]
+        nx, ny, nz = n
+        ZT = Z.T
+        for r in range(nz):
+            mask = (entries[2] == r)
+            entries_r = entries[:, mask]
+            entries_val_r = entries_val[mask]
+            num_entries_r = entries_r.shape[1]
+            num_sampl = num_entries_r+m
+            num_feat = m         
+       
+            B = np.zeros(num_sampl)
+            M_entr1 = np.eye(m)
+            for i in range(m):
+                M_entr1[i, i] *= np.sqrt(2*mu*lam*np.sum(Y[i]**2))
+        
+            m_arr = np.array(range(m))
+            M_entr2 = Y[m_arr[np.newaxis,:], (entries_r[1])[:, np.newaxis]]*X[m_arr[np.newaxis,:], (entries_r[0])[:, np.newaxis]]
+            
+        
+            B[m : ] = entries_val_r+mu*u[mask]
+            
+            M = np.vstack((M_entr1, M_entr2))
+            init_time = time.time()
+            
+            res = scipy.sparse.linalg.lsmr(M, B)
+            ZT[r] = res[0]
+        res_time = time.time()
+        Z = ZT.T
+        if verbose:
+            print("Z iteration minimization time: {}".format(res_time - init_time))
+        return Z
     
     
 
-    def run_minimization(X, Y, Z, n, m, entries_xyz, num_entries, test_entries, mu = 1.0,
-                                         tau = 0.1, max_global_iter = 8, max_iter = 1000,  verbose = True, lam = 1.0):
+    def run_minimization(
+        X, Y, Z, n, m, entries_xyz,
+        num_entries, test_entries, mu = 1.0,
+        tau = 0.1, max_global_iter = 8, 
+        max_iter = 1000,  verbose = True, lam = 1.0
+    ):
         mu = mu
         nu = 1.0
         
@@ -520,7 +632,7 @@ class am:
             score, _, _ = am.aul_f_sp(X, Y, Z, n, m, u, mu, entries = entries_a)
 
             small_step = 0
-            entries_a = am.from_dict_to_arr(entries_xyz, num_entries)
+#             entries_a = am.from_dict_to_arr(entries_xyz, num_entries)
 
             stop_condition = False 
             new_progress = 0
@@ -572,12 +684,14 @@ class am:
             #err1 = am.eval_error_direct_fast(X, Y, Z, n, m, test_entries)
             #print('eval_error_direct %f' % err1)
 
-        log_dataframe = pd.DataFrame(comp_log, columns = ['iter', 'obj_val', 'obs_err', 'test_err', 'nuc_norm', 'time', 'mu'])
+        log_dataframe = pd.DataFrame(
+            comp_log, columns = ['iter', 'obj_val', 'obs_err', 'test_err', 'nuc_norm', 'time', 'mu']
+        )
         return log_dataframe, (X, Y, Z)
 
 
-    def run_minimization1(X, Y, Z, n, m, entries_xyz, num_entries, test_entries, mu = 1.0,
-                                         tau = 0.1, max_global_iter = 30, max_iter = 1000,  verbose = True, lam = 1.0):
+    def run_min_balanced(X, Y, Z, n, m, entries_xyz, num_entries, test_entries, mu = 1.0,
+                         tau = 0.1, max_global_iter = 30, max_iter = 1000,  verbose = True, lam = 1.0):
         mu = mu
         nu = 1.0
         
@@ -597,7 +711,7 @@ class am:
             score, nuc_norm, err_obs = am.aul_f_sp(X, Y, Z, n, m, u, mu, entries = entries_a)
             nu = err_obs/1.5
             small_step = 0
-            entries_a = am.from_dict_to_arr(entries_xyz, num_entries)
+#             entries_a = am.from_dict_to_arr(entries_xyz, num_entries)
 
             stop_condition = False 
             new_progress = 0
@@ -608,6 +722,8 @@ class am:
                 X = am.reg_sp2_update_x(X, Y, Z, n, m, u, mu, entries_a, num_entries, verbose = False, lam = lam)
                 Y = am.reg_sp2_update_y(X, Y, Z, n, m, u, mu, entries_a, num_entries, verbose = False, lam = lam)
                 Z = am.reg_sp2_update_z(X, Y, Z, n, m, u, mu, entries_a, num_entries, lam = lam)
+                if (lam>0):    
+                    X, Y, Z = am.fix_components(X, Y, Z, n, m)
                 new_score, err_obs, nuc_norm = am.aul_f_sp(X, Y, Z, n, m, u, mu, entries = entries_a)
                 new_progress = score - new_score
                 score = new_score
@@ -621,26 +737,28 @@ class am:
                 comp_log[it] = np.array([it+1, score, err_obs, err1, nuc_norm, current_time, mu])
                 it += 1
 
-                stop_condition = (small_step>5+10*global_iter) or (it>=max_iter) or \
-                				 ( (small_step >= 5) and \
-                				 ( (progress>=1.2*new_progress) or (new_progress<0.01*np.abs(score/(global_iter+1))) ) )
-            if (lam>0):    
-                X, Y, Z = am.fix_components(X, Y, Z, n, m)
-            print("Minimization completed")
-            #u_new, err = am.compute_adjust_sp(X, Y, Z, n, m, mu, u, entries_a)
-            u_new, err = am.compute_adjust_fast(X, Y, Z, n, m, mu, u, entries_a)
-            print("Parameters are: mu = {}, nu = {}, err = {}".format(mu, nu, err))
+
+                stop_condition = ((small_step>5+10*global_iter) 
+                                  or (it>=max_iter) 
+                                  or ((small_step >= 5) 
+                                      and ((progress>=1.2*new_progress) or (new_progress<0.01*np.abs(score/(global_iter+1)))))
+                                 )
+            print("Global step completed")
+            #update u and mu
+            u_new, err = am.compute_adjust_sp(X, Y, Z, n, m, mu, u, entries_a)
+            print("Old parameters were: mu = {}, nu = {}".format(mu, nu))
             if (err_obs > nu) and (power<6):
                 if (lam>0.0):
-                  u = u_new
-                  power += 1
-                  print("u changed {} times".format(power))
+                    u = u_new
+                    power += 1
+                    print("u changed {} times".format(power))
             else: 
                 mu = 0.5*err_obs/(nuc_norm*(global_iter+1)**1.3)
                 power = 1
                 global_iter += 1
                 print("Scale changed. New scale: {}".format(mu))
                 nu = err*5
+            print(f"New parameters are: mu = {mu}, nu = {nu}")
             #print(time.time() - start)
             #print(aul_f(X_0, Y_0, Z_0, n, m1, u, mu, tensor, entries = entries_xyz))
             #ten = compute_tensor(X_0, Y_0, Z_0, n, m1)
