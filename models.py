@@ -109,12 +109,14 @@ class Tensor_completion(object):
             self.V_y = V_y or np.random.randn(rank, self.dim_y)
             self.V_z = V_z or np.random.randn(rank, self.dim_z)
         else:
-            self.V_x = V_x or np.transpose(self.initialization(self.x_dict))
-            self.V_y = V_y or np.transpose(self.initialization(self.y_dict))
-            self.V_z = V_z or np.transpose(self.initialization(self.z_dict))
+            self.V_x = V_x or self.initialization(self.y_dict, nz=self.dim_x)
+            self.V_y = V_y or self.initialization(self.z_dict, nz=self.dim_y)
+            self.V_z = V_z or self.initialization(self.x_dict, nz=self.dim_z)
             
     #Compute initial subspace estimates
-    def initialization(self, x_dict, p, r, nz):
+    def initialization(self, x_dict, nz):
+        r = self.rank
+        p = min(float(self.n_entries / (self.dim_x*self.dim_y*self.dim_z)), 1.)
         M_x = np.zeros((nz,nz))
         for x in x_dict.keys():
             for y in x_dict[x].keys():
@@ -835,22 +837,22 @@ class ALS_NN(Tensor_completion):
                 
                 execution_time += elapsed()
                 logs = {
-                    "Vanilla mu": mu,
-                    "Vanilla train error": err_obs,
-                    "Vanilla nuc.norm": nuc_norm,
-                    "Vanilla test rse": test_rse,
-                    "Vanilla test mse": test_mse,
-                    "Vanilla test rmse": test_rmse,
-                    "Vanilla test psnr": test_psnr,
+                    "Balanced mu": mu,
+                    "Balanced train error": err_obs,
+                    "Balanced nuc.norm": nuc_norm,
+                    "Balanced test rse": test_rse,
+                    "Balanced test mse": test_mse,
+                    "Balanced test rmse": test_rmse,
+                    "Balanced test psnr": test_psnr,
                     "Execution time": execution_time,
                 }
                 
                 if val_entries is not None:
                     logs.update({
-                        "Vanilla val rse": val_rse,
-                        "Vanilla val mse": val_mse,
-                        "Vanilla val rmse": val_rmse,
-                        "Vanilla val psnr": val_psnr
+                        "Balanced val rse": val_rse,
+                        "Balanced val mse": val_mse,
+                        "Balanced val rmse": val_rmse,
+                        "Balanced val psnr": val_psnr
                     })
                     if best_error > val_rse:
                         X_best = np.copy(X)
