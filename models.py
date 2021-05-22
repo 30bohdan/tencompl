@@ -25,12 +25,15 @@ class Tensor_completion(object):
         y_vecs=None, z_vecs=None,
         coeffs=None, correlated=False,
         entries_arr=None, noisy=False,
-        noise_size=0.1, randominit=True
+        noise_size=0.1, randominit=True,
+        seed=2021
     ): 
+        random.seed(seed)
+        np.random.seed(seed)
         self.n = n
         self.rank = rank
         self.dim_x, self.dim_y, self.dim_z = n
-        self.entries_arr_true = entries_arr
+        self.entries_arr_true = np.copy(entries_arr)
         self.entries_arr = np.copy(entries_arr)
         
         self.noisy = noisy
@@ -104,10 +107,11 @@ class Tensor_completion(object):
                 
                 
         #Initialize starting V_x, V_y, V_z
-        if randominit:            
-            self.V_x = V_x or np.random.randn(rank, self.dim_x)
-            self.V_y = V_y or np.random.randn(rank, self.dim_y)
-            self.V_z = V_z or np.random.randn(rank, self.dim_z)
+        if randominit:
+            entries_scale = np.sqrt(np.mean(self.entries_arr[3]**2))
+            self.V_x = V_x or np.random.randn(rank, self.dim_x)*entries_scale
+            self.V_y = V_y or np.random.randn(rank, self.dim_y)*entries_scale
+            self.V_z = V_z or np.random.randn(rank, self.dim_z)*entries_scale
         else:
             self.V_x = V_x or self.initialization(self.y_dict, nz=self.dim_x)
             self.V_y = V_y or self.initialization(self.z_dict, nz=self.dim_y)
@@ -196,7 +200,7 @@ class Tensor_completion(object):
         raise NotImplementedError()
 
 
-class Moitra_completion(Tensor_completion):
+class LM_completion(Tensor_completion):
 
     def eval_error_matrix(self, V_x,V_yz, nx, ny, nz, r):
         """Normalized MSE for unfolded matrix completion"""
@@ -313,8 +317,8 @@ class Moitra_completion(Tensor_completion):
             total_error += np.square(prediction - true_val)
             
         rse = np.sqrt(total_error/total_norm)
-        mse = np.mean(total_error)
-        rmse = np.sqrt(np.mean(total_error))
+        mse = total_error / num_test_entries
+        rmse = np.sqrt(total_error / num_test_entries)
         psnr = 20*np.log10(np.max(np.abs(test_entries[3]))) - 10*np.log10(mse)
         return rse, mse, rmse, psnr
     
@@ -450,17 +454,17 @@ class Moitra_completion(Tensor_completion):
                         val_errors = self.eval_error_subspace(V_x,V_y,V_z, x_dict, val_entries)
                         val_error = val_errors[0]
                         val_logs = {
-                            f"{which_alg}---val rse":val_errors[0],
-                            f"{which_alg}---val mse":val_errors[1],
-                            f"{which_alg}---val rmse":val_errors[2],
-                            f"{which_alg}---val psnr":val_errors[3],
+                            f"val rse":val_errors[0],
+                            f"val mse":val_errors[1],
+                            f"val rmse":val_errors[2],
+                            f"val psnr":val_errors[3],
                         }
                     curr_errors = self.eval_error_subspace(V_x,V_y,V_z, x_dict, test_entries)
                     test_logs = {
-                            f"{which_alg}---test rse":curr_errors[0],
-                            f"{which_alg}---test mse":curr_errors[1],
-                            f"{which_alg}---test rmse":curr_errors[2],
-                            f"{which_alg}---test psnr":curr_errors[3],
+                            f"test rse":curr_errors[0],
+                            f"test mse":curr_errors[1],
+                            f"test rmse":curr_errors[2],
+                            f"test psnr":curr_errors[3],
                         }
                     cur_error = curr_errors[0]
             
@@ -473,7 +477,7 @@ class Moitra_completion(Tensor_completion):
                 if val_entries is not None:
                     logger.log(val_logs, step=i)
             execution_time += elapsed()
-            logger.log({"Execution time": execution_time}, step=i)
+            logger.log({"execution time": execution_time}, step=i)
         
         if val_entries is not None:
             coeffs = self.get_coeffs(V_x_best, V_y_best, V_z_best, x_dict, self.n)
@@ -496,7 +500,7 @@ class Moitra_completion(Tensor_completion):
         V_x, V_y, V_z, coeffs = solution
         recovered_frames = []
         for idx_frame in idx_frames:
-            recovered_frames.append(Moitra_completion.recover_frame(idx_frame, coeffs, V_x, V_y, V_z))
+            recovered_frames.append(LM_completion.recover_frame(idx_frame, coeffs, V_x, V_y, V_z))
         return recovered_frames
                                 
 
@@ -556,7 +560,7 @@ class ALS_NN(Tensor_completion):
         
         rse = total_error / total_norm
         mse = np.mean(error**2)
-        rmse = total_error / num_entries
+        rmse = total_error / np.sqrt(num_entries)
         psnr = 20*np.log10(np.max(np.abs(entries[-1]))) - 10*np.log10(mse)
         
         return rse, mse, rmse, psnr
@@ -725,22 +729,22 @@ class ALS_NN(Tensor_completion):
                 
                 execution_time += elapsed()
                 logs = {
-                    "Vanilla mu": mu,
-                    "Vanillar train error": err_obs,
-                    "Vanilla nuc.norm": nuc_norm,
-                    "Vanilla test rse": test_rse,
-                    "Vanilla test mse": test_mse,
-                    "Vanilla test rmse": test_rmse,
-                    "Vanilla test psnr": test_psnr,
-                    "Execution time": execution_time
+                    "mu": mu,
+                    "train error": err_obs,
+                    "nuc.norm": nuc_norm,
+                    "test rse": test_rse,
+                    "test mse": test_mse,
+                    "test rmse": test_rmse,
+                    "test psnr": test_psnr,
+                    "execution time": execution_time
                 }
                 
                 if val_entries is not None:
                     logs.update({
-                        "Vanilla val rse": val_rse,
-                        "Vanilla val mse": val_mse,
-                        "Vanilla val rmse": val_rmse,
-                        "Vanilla val psnr":val_psnr
+                        "val rse": val_rse,
+                        "val mse": val_mse,
+                        "val rmse": val_rmse,
+                        "val psnr":val_psnr
                     })
                     if best_error > val_rse:
                         X_best = np.copy(X)
@@ -837,22 +841,22 @@ class ALS_NN(Tensor_completion):
                 
                 execution_time += elapsed()
                 logs = {
-                    "Balanced mu": mu,
-                    "Balanced train error": err_obs,
-                    "Balanced nuc.norm": nuc_norm,
-                    "Balanced test rse": test_rse,
-                    "Balanced test mse": test_mse,
-                    "Balanced test rmse": test_rmse,
-                    "Balanced test psnr": test_psnr,
-                    "Execution time": execution_time,
+                    "mu": mu,
+                    "train error": err_obs,
+                    "nuc.norm": nuc_norm,
+                    "test rse": test_rse,
+                    "test mse": test_mse,
+                    "test rmse": test_rmse,
+                    "test psnr": test_psnr,
+                    "execution time": execution_time,
                 }
                 
                 if val_entries is not None:
                     logs.update({
-                        "Balanced val rse": val_rse,
-                        "Balanced val mse": val_mse,
-                        "Balanced val rmse": val_rmse,
-                        "Balanced val psnr": val_psnr
+                        "val rse": val_rse,
+                        "val mse": val_mse,
+                        "val rmse": val_rmse,
+                        "val psnr": val_psnr
                     })
                     if best_error > val_rse:
                         X_best = np.copy(X)

@@ -44,6 +44,7 @@ def elapsed(last_time=[time.time()]):
 
 
 def get_tensor_entries(tensor, size, seed=None):
+    if tensor is None: return None
     if seed is not None:
         np.random.seed(seed)
         random.seed(seed)

@@ -26,7 +26,7 @@ def main(experiment="experiment1", seed=13):
         random.seed(seed)
     
     experiment_config = experiment_configs[experiment]
-    method = experiment_config["method"]
+    methods = experiment_config["methods"]
     max_iter = experiment_config["max_iter"]
     
     dataset_name = experiment_config["dataset"]
@@ -47,62 +47,64 @@ def main(experiment="experiment1", seed=13):
     dataset_full = config.datasets[dataset_name]
     
     for dim_x in n_frames:
+        dataset = dataset_full[:dim_x]
         for rank in ranks:
             for portion in portions:
-                n = (dim_x, dim_y, dim_z)
-                n_entries = int(dim_x * dim_y * dim_z * portion)
-                dataset = dataset_full[:dim_x]
-                
-                # Set logger
-                wandb_configs = {
-                    "method": method,
-                    "num_frames": dim_x,
-                    "height": dim_y,
-                    "width": dim_z,
-                    "dataset": dataset_name,
-                    "rank": rank,
-                    "portion": portion,
-                    "n_entries": n_entries,
-                    "lambda": lambda_,
-                    "n_val_entries": n_val_entries,
-                    "n_test_entries": n_test_entries,
-                    "predict_frames": predict_frames,
-                    "noisy": noisy,
-                    "randominit": randominit,
-                }
-                logger = wandb.init(project='tensor-completion', entity='tensor-completion', group=method, reinit=True)
-                logger.config.update(wandb_configs)
-                run_name =  "frames: {};dataset: {}, rank: {}, portion: {}".format(
-                    dim_x, dataset_name, rank, portion
-                )
-                logger.name = run_name
-                
-                
-                entries_arr = get_tensor_entries(dataset, size=n_entries, seed=seed)
-                val_entries = get_tensor_entries(dataset, size=n_val_entries)
-                test_entries = get_tensor_entries(dataset, size=n_test_entries)
-                
-                solver = config.solvers[method]
-                #init data
-                solver = solver(
-                    n=n, rank=rank, n_entries=n_entries,
-                    entries_arr=entries_arr, noisy=noisy,
-                    randominit=randominit
-                )
-                
-                solution = solver.fit(
-                    test_entries=test_entries,
-                    val_entries=val_entries,
-                    logger=logger, max_iter=max_iter,
-                    lam=lambda_
-                )
-                
-                pred = solver.predict(solution, predict_frames)
-                images = []
-                for image, idx_frame in zip(pred, predict_frames):
-                    images.append(wandb.Image(image, caption=f"Frame #{idx_frame}"))
-                wandb.log({"Visualize prediction:": images})
-                
+                for method in methods:
+                    n = (dim_x, dim_y, dim_z)
+                    n_entries = int(dim_x * dim_y * dim_z * portion)
+
+                    # Set logger config
+                    wandb_configs = {
+                        "methods": method,
+                        "num_frames": dim_x,
+                        "height": dim_y,
+                        "width": dim_z,
+                        "dataset": dataset_name,
+                        "rank": rank,
+                        "portion": portion,
+                        "n_entries": n_entries,
+                        "lambda": lambda_,
+                        "n_val_entries": n_val_entries,
+                        "n_test_entries": n_test_entries,
+                        "predict_frames": predict_frames,
+                        "noisy": noisy,
+                        "randominit": randominit,
+                    }
+                    group_name = f"Dim-{dim_x}x{dim_y}x{dim_z} dataset-{dataset_name} rank-{rank} portion-{portion}"
+                    logger = wandb.init(project='tensor-completion', entity='tensor-completion', group=group_name, reinit=True)
+                    logger.config.update(wandb_configs)
+                    run_name =  "method: {}; frames: {}; lambda:{}".format(
+                        method, dim_x, lambda_
+                    )
+                    logger.name = run_name
+
+                    entries_arr = get_tensor_entries(dataset, size=n_entries, seed=seed)
+                    val_entries = get_tensor_entries(dataset, size=n_val_entries)
+                    test_entries = get_tensor_entries(dataset, size=n_test_entries)
+                    solver = config.solvers[method]
+                    
+                    #init data
+                    solver = solver(
+                        n=n, rank=rank, n_entries=n_entries,
+                        entries_arr=entries_arr, noisy=noisy,
+                        randominit=randominit
+                    )
+
+                    solution = solver.fit(
+                        test_entries=test_entries,
+                        val_entries=val_entries,
+                        logger=logger, max_iter=max_iter,
+                        lam=lambda_
+                    )
+
+                    pred = solver.predict(solution, predict_frames)
+                    images = []
+                    for image, idx_frame in zip(pred, predict_frames):
+                        images.append(wandb.Image(image, caption=f"Frame #{idx_frame}; method: {method}; rank: {rank}; protion:{portion};"))
+                    logger.log({"Visualize prediction:": images})
+                logger.finish()
+
 
 if __name__=="__main__":
     fire.Fire(main)
