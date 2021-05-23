@@ -47,10 +47,15 @@ def main(experiment="experiment1", seed=13):
     dataset_full = config.datasets[dataset_name]
     
     for dim_x in n_frames:
-        dataset = dataset_full[:dim_x]
-        for rank in ranks:
+        if dataset_full is not None:
+            dataset = dataset_full[:dim_x]
+        else:
+            dataset = None
+        for rank, true_rank in ranks:
             for portion in portions:
                 for method in methods:
+                    if method=="ALS":
+                        lambda_ = 0
                     n = (dim_x, dim_y, dim_z)
                     n_entries = int(dim_x * dim_y * dim_z * portion)
 
@@ -62,6 +67,7 @@ def main(experiment="experiment1", seed=13):
                         "width": dim_z,
                         "dataset": dataset_name,
                         "rank": rank,
+                        "true_rank": true_rank,
                         "portion": portion,
                         "n_entries": n_entries,
                         "lambda": lambda_,
@@ -72,17 +78,23 @@ def main(experiment="experiment1", seed=13):
                         "randominit": randominit,
                     }
                     group_name = f"Dim-{dim_x}x{dim_y}x{dim_z} dataset-{dataset_name} rank-{rank} portion-{portion}"
+                    if method=="ALS":
+                        group_name += f" true_rank-{true_rank}"
                     logger = wandb.init(project='tensor-completion', entity='tensor-completion', group=group_name, reinit=True)
                     logger.config.update(wandb_configs)
-                    run_name =  "method: {}; frames: {}; lambda:{}".format(
-                        method, dim_x, lambda_
+                    run_name =  "method: {}; frames: {}; lambda:{}; randinit:{}; noisy:{}".format(
+                        method, dim_x, lambda_, randominit, noisy
                     )
                     logger.name = run_name
 
                     entries_arr = get_tensor_entries(dataset, size=n_entries, seed=seed)
                     val_entries = get_tensor_entries(dataset, size=n_val_entries)
                     test_entries = get_tensor_entries(dataset, size=n_test_entries)
+                    
                     solver = config.solvers[method]
+                    if method=="ALS":
+                        val_entries = solver.get_entries(n_val_entries)
+                        test_entries = solver.get_entries(n_test_entries)
                     
                     #init data
                     solver = solver(

@@ -12,7 +12,7 @@ def generate_config(
     n_val_entries=10000, n_test_entries=10000,
     methods="Kron-Altmin-LiuMoitra",
     predict_frames=None, noisy=False,
-    randominit=True
+    randominit=True, true_rank=None
 ):
     if portions is None and n_enries is None:
         raise Exception("Config is unvalid")
@@ -54,7 +54,7 @@ experiment_configs = {
     "experiment1": generate_config(
         dataset="akiyo",
         methods=["ALS_NN"],
-        ranks=[5, 8],
+        ranks=[(5, None), (8, None)],
         n_frames=[50, 70],
         dim_y=144,
         dim_z=176,
@@ -70,7 +70,7 @@ experiment_configs = {
     "experiment2": generate_config(
         dataset="akiyo",
         methods=["Kron-Altmin-LiuMoitra"],
-        ranks=[5, 8],
+        ranks=[(5, None), (8, None)],
         n_frames=[50, 70],
         dim_y=144,
         dim_z=176,
@@ -86,7 +86,7 @@ experiment_configs = {
     "experiment3": generate_config(
         dataset="akiyo",
         methods=["ALS_NN"],
-        ranks=[5, 8],
+        ranks=[(5, None), (8, None)],
         n_frames=[50, 70],
         dim_y=144,
         dim_z=176,
@@ -102,7 +102,7 @@ experiment_configs = {
     "experiment4": generate_config(
         dataset="akiyo",
         methods=["Kron-Altmin-LiuMoitra", "ALS_NN"],
-        ranks=[5, 8],
+        ranks=[(5, None), (8, None)],
         n_frames=[50, 70],
         dim_y=144,
         dim_z=176,
@@ -121,4 +121,5 @@ experiment_configs = {
 solvers = {
     "Kron-Altmin-LiuMoitra": LM_completion,
     "ALS_NN": ALS_NN,
+    "ALS": ALS_NN,
 }

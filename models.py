@@ -26,11 +26,12 @@ class Tensor_completion(object):
         coeffs=None, correlated=False,
         entries_arr=None, noisy=False,
         noise_size=0.1, randominit=True,
-        seed=2021
+        seed=2021, true_rank=None
     ): 
         random.seed(seed)
         np.random.seed(seed)
         self.n = n
+        self.true_rank = true_rank or rank
         self.rank = rank
         self.dim_x, self.dim_y, self.dim_z = n
         self.entries_arr_true = np.copy(entries_arr)
@@ -50,16 +51,16 @@ class Tensor_completion(object):
         
         self.x_dict, self.y_dict, self.z_dict = {}, {}, {}
         if entries_arr is None:
-            self.x_coords, self.y_coords, self.z_coords = sample_triples(
+            x_coords, y_coords, z_coords = sample_triples(
                 n_entries, self.dim_x, self.dim_y, self.dim_z
             )
             if self.correlated:
                 self.coeffs, self.x_vecs, self.y_vecs, self.z_vecs = self.gen_biased(
-                    self.dim_x, self.dim_y, self.dim_z, rank
+                    self.dim_x, self.dim_y, self.dim_z, true_rank
                 )
             else:
                 self.coeffs, self.x_vecs, self.y_vecs, self.z_vecs = self.gen(
-                    self.dim_x, self.dim_y, self.dim_z, rank
+                    self.dim_x, self.dim_y, self.dim_z, true_rank
                 )
             
             self.x_vecs = x_vecs or self.x_vecs
@@ -67,17 +68,27 @@ class Tensor_completion(object):
             self.z_vecs = z_vecs or self.z_vecs
             
             self.fill(
-                self.x_coords, self.y_coords, self.z_coords,
+                x_coords, y_coords, z_coords,
                 self.coeffs, self.x_vecs, self.y_vecs, self.z_vecs, self.x_dict
             )
             self.fill(
-                self.y_coords, self.z_coords, self.x_coords, 
+                y_coords, z_coords, x_coords, 
                 self.coeffs, self.y_vecs, self.z_vecs, self.x_vecs, self.y_dict
             )
             self.fill(
-                self.z_coords, self.x_coords, self.y_coords, 
+                z_coords, x_coords, y_coords, 
                 self.coeffs, self.z_vecs, self.x_vecs, self.y_vecs, self.z_dict
             )
+            
+            self.entries_arr = np.zeros((4, n_entries), dtype=np.float)
+            for i, (x_coord, y_coord, z_coord) in enumerate(zip(x_coords, y_coords, z_coords)):
+                self.entries_arr[0][i] = x_coord
+                self.entries_arr[1][i] = y_coord
+                self.entries_arr[2][i] = z_coord
+                self.entries_arr[3][i] += self.x_dict[x_coord][y_coord][z_coord]
+                self.entries_arr[3][i] += self.x_dict[x_coord][y_coord][z_coord]
+                self.entries_arr[3][i] += self.x_dict[x_coord][y_coord][z_coord]
+                self.entries_arr[3][i] /= 3
         else:
             for x_coord, y_coord, z_coord, val in zip(
                 entries_arr[0], entries_arr[1], entries_arr[2], entries_arr[3]
@@ -109,9 +120,9 @@ class Tensor_completion(object):
         #Initialize starting V_x, V_y, V_z
         if randominit:
             entries_scale = np.sqrt(np.mean(self.entries_arr[3]**2))
-            self.V_x = V_x or np.random.randn(rank, self.dim_x)*entries_scale
-            self.V_y = V_y or np.random.randn(rank, self.dim_y)*entries_scale
-            self.V_z = V_z or np.random.randn(rank, self.dim_z)*entries_scale
+            self.V_x = V_x or np.random.randn(rank, self.dim_x)*entries_scale**(1/3)
+            self.V_y = V_y or np.random.randn(rank, self.dim_y)*entries_scale**(1/3)
+            self.V_z = V_z or np.random.randn(rank, self.dim_z)*entries_scale**(1/3)
         else:
             self.V_x = V_x or self.initialization(self.y_dict, nz=self.dim_x)
             self.V_y = V_y or self.initialization(self.z_dict, nz=self.dim_y)
@@ -192,6 +203,19 @@ class Tensor_completion(object):
                     x_coords[i], y_coords[i] , z_coords[i], coeffs, x_vecs, y_vecs, z_vecs
                 )
     
+    def get_entries(self, n_entries):
+        if self.x_vecs is None or self.y_vecs is None or self.z_vecs is None or self.coeffs is None:
+            raise NotImplementedError()
+        x_coords, y_coord, z_coords = sample_triples(n_entries, self.x_dim, self.y_dim, self.z_dim)
+        entries = np.empty((4, n_entries), dtype=np.float)
+        for i, (x_coord, y_coord, z_coord) in enumerate(x_coords, y_coords, z_coords):
+            entries[0][i] = x_coord
+            entries[1][i] = y_coord
+            entries[2][i] = z_coord
+            entries[3][i] = self.T(x_coord, y_coord, z_coord, self.coeffs, self.x_vecs, self.y_vecs, self.z_vecs)
+        
+        return entries
+    
     def fit(self):
         raise NotImplementedError()
     
@@ -201,61 +225,6 @@ class Tensor_completion(object):
 
 
 class LM_completion(Tensor_completion):
-
-    def eval_error_matrix(self, V_x,V_yz, nx, ny, nz, r):
-        """Normalized MSE for unfolded matrix completion"""
-        #take random sample of entries to speed up evaluation
-        num_trials = 1000
-        total_error = 0
-        total_norm = 0
-        for i in range(num_trials):
-            x = np.random.randint(nx)
-            y = np.random.randint(ny)
-            z = np.random.randint(nz)
-            prediction = 0
-            for j in range(r):
-                prediction += V_x[x][j] * V_yz[nz * y + z][j]
-            true_val = self.T(x,y,z, coeffs, x_vecs,y_vecs, z_vecs)
-            total_norm += np.square(true_val)
-            total_error += np.square(prediction - true_val)
-        return np.sqrt(total_error/total_norm)
-
-    def power_altmin(V_x, V_y, V_z , x_dict, nx, ny, nz):
-        """Altmin for naive tensor powering"""
-        lsq_solution = []
-        for i in range(nx):
-            features = []
-            target = []
-            for y_coord in x_dict[i].keys():
-                for z_coord in x_dict[i][y_coord].keys():
-                    #subsample to speed up and get "unstuck"
-                    check = np.random.randint(2)
-                    if(check == 0):
-                        features.append(np.multiply(V_y[y_coord], V_z[z_coord]))
-                        target.append(x_dict[i][y_coord][z_coord])
-            features = np.array(features)
-            target = np.array(target)
-            reg = LinearRegression(fit_intercept = False).fit(features, target)
-            lsq_solution.append(reg.coef_)
-        lsq_solution = np.array(lsq_solution)
-        return (lsq_solution)
-
-    def eval_error_direct(self, V_x, V_y, V_z, x_dict, nx, ny, nz):
-        """Normalized MSE for naive tensor powering"""
-        num_trials = 1000
-        total_error = 0
-        total_norm = 0
-        for i in range(num_trials):
-            x = np.random.randint(nx)
-            y = np.random.randint(ny)
-            z = np.random.randint(nz)
-            prediction = 0
-            for j in range(self.rank):
-                prediction += V_x[x][j] * V_y[y][j] * V_z[z][j]
-            true_val = x_dict[x][y][z]
-            total_norm += np.square(true_val)
-            total_error += np.square(prediction - true_val)
-        return np.sqrt(total_error/total_norm)
 
     def subspace_altmin(self, V_x, V_y, V_z , x_dict, nx, ny, nz):
         """Altmin for our algorithm"""
@@ -311,7 +280,7 @@ class LM_completion(Tensor_completion):
             z = int(test_entries[2, i])
             part = np.tensordot(V_x[x], V_y[y], axes = 0).flatten()
             feature = np.tensordot(part, V_z[z], axes = 0).flatten()
-            prediction = np.dot(feature, solution_coeffs)
+            prediction = np.clip(np.dot(feature, solution_coeffs), 0, 256)
             true_val = test_entries[3, i] 
             total_norm += np.square(true_val)
             total_error += np.square(prediction - true_val)
@@ -356,7 +325,7 @@ class LM_completion(Tensor_completion):
             part = np.tensordot(V_x[x], V_y[y], axes = 0).flatten()
             feature = np.tensordot(part, V_z[z], axes = 0).flatten()
             pred[i] = np.dot(feature, solution_coeffs)
-        return pred
+        return np.clip(pred, 0, 256)
     
     @staticmethod
     def get_coeffs(V_x, V_y, V_z, x_dict, n):
@@ -390,13 +359,13 @@ class LM_completion(Tensor_completion):
                 part = np.tensordot(V_x[idx_frame], V_y[i], axes = 0).flatten()
                 feature = np.tensordot(part, V_z[j], axes = 0).flatten()
                 pred[i, j] = np.dot(feature, sol_coeffs)
-        return pred
+        return pred.clip(0, 256)
 
     def fit(
         self, max_iter, test_entries, 
         val_entries=None, threshold=1e-6,
-        which_alg="Subspace Powering",
-        logger=None, inplace=False, **kwargs
+        logger=None, inplace=False,
+        rank=None, **kwargs
     ):
         nx, ny, nz = self.n
         rank = self.rank
@@ -432,43 +401,29 @@ class LM_completion(Tensor_completion):
         #AltMin Steps
         for i in range(max_iter):
             elapsed()
-            if(which_alg == "Matrix Alt Min" or which_alg == "all"):
-                V_xmat, V_yzmat = self.matrix_altmin(V_xmat, V_yzmat)
-                curr_error = self.eval_error_matrix(V_xmat, V_yzmat)
-                test_logs = {f"{which_alg}---test error":curr_error}
-                
-            if(which_alg == "Tensor Powering" or which_alg == "all"):
-                if(curr_error > threshold):
-                    V_x = self.power_altmin(V_x, V_y, V_z, x_dict, nx, ny, nz)
-                    V_y = self.power_altmin(V_y, V_z, V_x, y_dict, ny, nz, nx)
-                    V_z = self.power_altmin(V_z, V_x, V_y, z_dict, nz, nx, ny)
-                    curr_error = eval_error_direct(V_x, V_y, V_z, x_dict)
-                    test_logs = {f"{which_alg}---test error":curr_error}
-                
-            if(which_alg == "Subspace Powering" or which_alg == "all"):
-                if(curr_error > threshold):
-                    V_x = self.subspace_altmin(V_x, V_y, V_z, x_dict, nx, ny, nz)
-                    V_y = self.subspace_altmin(V_y, V_z, V_x, y_dict, ny, nz, nx)
-                    V_z = self.subspace_altmin(V_z, V_x, V_y, z_dict, nz, nx, ny)
-                    if val_entries is not None:
-                        val_errors = self.eval_error_subspace(V_x,V_y,V_z, x_dict, val_entries)
-                        val_error = val_errors[0]
-                        val_logs = {
-                            f"val rse":val_errors[0],
-                            f"val mse":val_errors[1],
-                            f"val rmse":val_errors[2],
-                            f"val psnr":val_errors[3],
-                        }
-                    curr_errors = self.eval_error_subspace(V_x,V_y,V_z, x_dict, test_entries)
-                    test_logs = {
-                            f"test rse":curr_errors[0],
-                            f"test mse":curr_errors[1],
-                            f"test rmse":curr_errors[2],
-                            f"test psnr":curr_errors[3],
-                        }
-                    cur_error = curr_errors[0]
+            if(curr_error > threshold):
+                V_x = self.subspace_altmin(V_x, V_y, V_z, x_dict, nx, ny, nz)
+                V_y = self.subspace_altmin(V_y, V_z, V_x, y_dict, ny, nz, nx)
+                V_z = self.subspace_altmin(V_z, V_x, V_y, z_dict, nz, nx, ny)
+                if val_entries is not None:
+                    val_errors = self.eval_error_subspace(V_x,V_y,V_z, x_dict, val_entries)
+                    val_error = val_errors[0]
+                    val_logs = {
+                        f"val rse":val_errors[0],
+                        f"val mse":val_errors[1],
+                        f"val rmse":val_errors[2],
+                        f"val psnr":val_errors[3],
+                    }
+                curr_errors = self.eval_error_subspace(V_x,V_y,V_z, x_dict, test_entries)
+                test_logs = {
+                        f"test rse":curr_errors[0],
+                        f"test mse":curr_errors[1],
+                        f"test rmse":curr_errors[2],
+                        f"test psnr":curr_errors[3],
+                    }
+                cur_error = curr_errors[0]
             
-            if best_error > val_error:
+            if val_entries is not None and best_error > val_error:
                 best_error = val_error
                 V_x_best, V_y_best, V_z_best = np.copy(V_x), np.copy(V_y), np.copy(V_z)
             
@@ -476,8 +431,8 @@ class LM_completion(Tensor_completion):
                 logger.log(test_logs, step=i)
                 if val_entries is not None:
                     logger.log(val_logs, step=i)
-            execution_time += elapsed()
-            logger.log({"execution time": execution_time}, step=i)
+                execution_time += elapsed()
+                logger.log({"execution time": execution_time}, step=i)
         
         if val_entries is not None:
             coeffs = self.get_coeffs(V_x_best, V_y_best, V_z_best, x_dict, self.n)
@@ -492,7 +447,7 @@ class LM_completion(Tensor_completion):
             self.V_y = np.transpose(V_y)
             self.V_z = np.transpose(V_z)
         
-        coeffs = get_coeffs(V_x, V_y, V_z, x_dict, self.n)
+        coeffs = self.get_coeffs(V_x, V_y, V_z, x_dict, self.n)
         return V_x, V_y, V_z, coeffs
     
     @staticmethod
@@ -554,7 +509,7 @@ class ALS_NN(Tensor_completion):
         tmp = Y[m_arr[np.newaxis, :], (entries_i[1])[:, np.newaxis]]* \
                 X[m_arr[np.newaxis, :], (entries_i[0])[:, np.newaxis]]* \
                        Z[m_arr[np.newaxis, :], (entries_i[2])[:, np.newaxis]]
-        error = ent + np.sum(tmp, axis = 1)
+        error = ent + np.clip(np.sum(tmp, axis = 1), 0, 256)
         total_error = np.sqrt(np.sum(error**2))
         total_norm = np.sqrt(np.sum(entries[3]**2))
         
@@ -679,8 +634,8 @@ class ALS_NN(Tensor_completion):
         max_iter=1000, logger=None, lam=1.0
     ):
         nx, ny, nz = self.n
+        m = self.rank
         n = self.n
-        m = self.m
         num_entries = self.n_entries
         
         X = np.copy(self.V_x)
@@ -929,4 +884,4 @@ class ALS_NN(Tensor_completion):
             tmp = np.kron(Y[i], Z[i])
             tensor += np.kron(X[i][idx_frames], tmp)
         
-        return tensor.reshape(len(idx_frames), ny, nz)
+        return np.clip(tensor.reshape(len(idx_frames), ny, nz), 0, 256)
