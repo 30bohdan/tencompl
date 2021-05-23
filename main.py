@@ -97,7 +97,7 @@ def main(experiment="experiment1", seed=13):
                     solver = solver(
                         n=n, rank=rank, n_entries=n_entries,
                         entries_arr=entries_arr, noisy=noisy,
-                        randominit=randominit
+                        randominit=randominit, true_rank=true_rank
                     )
                     
                     if dataset is None:
