@@ -113,7 +113,23 @@ experiment_configs = {
         max_iter=50,
         noisy=False,
         randominit=False,
-        lambda_=0
+        lambda_=1
+    ),
+    "target1": generate_config(
+        dataset="akiyo",
+        methods=["Kron-Altmin-LiuMoitra", "ALS_NN", "ALS"],
+        ranks=[(5, None), (8, None)],
+        n_frames=[50, 70],
+        dim_y=144,
+        dim_z=176,
+        portions=[0.02, 0.03, 0.05, 0.075, 0.1],
+        n_val_entries=5000,
+        n_test_entries=5000,
+        predict_frames=[0, 20, -20, -1],
+        max_iter=50,
+        noisy=False,
+        randominit=False,
+        lambda_=1
     ),
 }
 

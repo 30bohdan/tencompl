@@ -20,11 +20,7 @@ from config import experiment_configs
 import pdb
 
 
-def main(experiment="experiment1", seed=13):
-    if seed is not None:
-        np.random.seed(seed)
-        random.seed(seed)
-    
+def main(experiment="experiment1", seed=2021):
     experiment_config = experiment_configs[experiment]
     methods = experiment_config["methods"]
     max_iter = experiment_config["max_iter"]
@@ -78,12 +74,12 @@ def main(experiment="experiment1", seed=13):
                         "randominit": randominit,
                     }
                     group_name = f"Dim-{dim_x}x{dim_y}x{dim_z} dataset-{dataset_name} rank-{rank} portion-{portion}"
-                    if method=="ALS":
+                    if dataset is None:
                         group_name += f" true_rank-{true_rank}"
                     logger = wandb.init(project='tensor-completion', entity='tensor-completion', group=group_name, reinit=True)
                     logger.config.update(wandb_configs)
-                    run_name =  "method: {}; frames: {}; lambda:{}; randinit:{}; noisy:{}".format(
-                        method, dim_x, lambda_, randominit, noisy
+                    run_name =  "method: {}; randinit:{}; noisy:{}".format(
+                        method, randominit, noisy
                     )
                     logger.name = run_name
 
@@ -92,16 +88,17 @@ def main(experiment="experiment1", seed=13):
                     test_entries = get_tensor_entries(dataset, size=n_test_entries)
                     
                     solver = config.solvers[method]
-                    if method=="ALS":
-                        val_entries = solver.get_entries(n_val_entries)
-                        test_entries = solver.get_entries(n_test_entries)
                     
                     #init data
                     solver = solver(
                         n=n, rank=rank, n_entries=n_entries,
                         entries_arr=entries_arr, noisy=noisy,
-                        randominit=randominit
+                        randominit=randominit, seed=seed
                     )
+                    
+                    if dataset is None:
+                        val_entries = solver.get_entries(n_val_entries)
+                        test_entries = solver.get_entries(n_test_entries)
 
                     solution = solver.fit(
                         test_entries=test_entries,
