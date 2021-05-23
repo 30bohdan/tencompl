@@ -20,7 +20,7 @@ from config import experiment_configs
 import pdb
 
 
-def main(experiment="experiment1", seed=2021):
+def main(experiment="experiment1", seed=13):
     experiment_config = experiment_configs[experiment]
     methods = experiment_config["methods"]
     max_iter = experiment_config["max_iter"]
@@ -50,6 +50,8 @@ def main(experiment="experiment1", seed=2021):
         for rank, true_rank in ranks:
             for portion in portions:
                 for method in methods:
+                    np.random.seed(seed)
+                    random.seed(seed)
                     if method=="ALS":
                         lambda_ = 0
                     n = (dim_x, dim_y, dim_z)
@@ -83,7 +85,7 @@ def main(experiment="experiment1", seed=2021):
                     )
                     logger.name = run_name
 
-                    entries_arr = get_tensor_entries(dataset, size=n_entries, seed=seed)
+                    entries_arr = get_tensor_entries(dataset, size=n_entries)
                     val_entries = get_tensor_entries(dataset, size=n_val_entries)
                     test_entries = get_tensor_entries(dataset, size=n_test_entries)
                     
@@ -93,7 +95,7 @@ def main(experiment="experiment1", seed=2021):
                     solver = solver(
                         n=n, rank=rank, n_entries=n_entries,
                         entries_arr=entries_arr, noisy=noisy,
-                        randominit=randominit, seed=seed
+                        randominit=randominit
                     )
                     
                     if dataset is None:
