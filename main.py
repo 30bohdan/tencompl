@@ -54,6 +54,8 @@ def main(experiment="experiment1", seed=13):
                     random.seed(seed)
                     if method=="ALS":
                         lambda_ = 0
+                    else:
+                        lambda_ = experiment_config.get("lambda", None)
                     n = (dim_x, dim_y, dim_z)
                     n_entries = int(dim_x * dim_y * dim_z * portion)
 
