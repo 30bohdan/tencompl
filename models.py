@@ -206,9 +206,9 @@ class Tensor_completion(object):
     def get_entries(self, n_entries):
         if self.x_vecs is None or self.y_vecs is None or self.z_vecs is None or self.coeffs is None:
             raise NotImplementedError()
-        x_coords, y_coord, z_coords = sample_triples(n_entries, self.x_dim, self.y_dim, self.z_dim)
+        x_coords, y_coords, z_coords = sample_triples(n_entries, self.dim_x, self.dim_y, self.dim_z)
         entries = np.empty((4, n_entries), dtype=np.float)
-        for i, (x_coord, y_coord, z_coord) in enumerate(x_coords, y_coords, z_coords):
+        for i, (x_coord, y_coord, z_coord) in enumerate(zip(x_coords, y_coords, z_coords)):
             entries[0][i] = x_coord
             entries[1][i] = y_coord
             entries[2][i] = z_coord
