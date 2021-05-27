@@ -24,12 +24,15 @@ class Tensor_completion(object):
         V_z=None, x_vecs=None,
         y_vecs=None, z_vecs=None,
         coeffs=None, correlated=False,
-        entries_arr=None, noisy=False,
-        noise_size=0.1, randominit=True,
-        seed=2021, true_rank=None
+        entries_arr=None, noisy=None,
+        randominit=True, seed=2021,
+        true_rank=None, is_clip=True
     ): 
         random.seed(seed)
         np.random.seed(seed)
+        self.is_clip = is_clip
+        if entries_arr is None:
+            self.is_clip = False
         self.n = n
         self.true_rank = true_rank or rank
         self.rank = rank
@@ -38,7 +41,6 @@ class Tensor_completion(object):
         self.entries_arr = np.copy(entries_arr)
         
         self.noisy = noisy
-        self.noise_size = noise_size
         self.randominit = randominit
         
         self.x_vecs = None
@@ -66,6 +68,7 @@ class Tensor_completion(object):
             self.x_vecs = x_vecs or self.x_vecs
             self.y_vecs = y_vecs or self.y_vecs
             self.z_vecs = z_vecs or self.z_vecs
+            self.coeffs = coeffs or self.coeffs
             
             self.fill(
                 x_coords, y_coords, z_coords,
@@ -108,13 +111,14 @@ class Tensor_completion(object):
                 self.y_dict[y_coord][z_coord][x_coord] = val
                 self.z_dict[z_coord][x_coord][y_coord] = val
                 
-        if noisy:
+        if noisy is not None:
             i = 0
-            for x_coord, y_coord, z_coord in zip(entries_arr[0], entries_arr[1], entries_arr[2]):
-                self.x_dict[x_coord][y_coord][z_coord] += np.random.normal(0, noise_size)
-                self.y_dict[y_coord][z_coord][x_coord] += np.random.normal(0, noise_size)
-                self.z_dict[z_coord][x_coord][y_coord] += np.random.normal(0, noise_size)
-                self.entries_arr[3, i] += np.random.normal(0, noise_size)
+            for x_coord, y_coord, z_coord in zip(self.entries_arr[0], self.entries_arr[1], self.entries_arr[2]):
+                self.x_dict[x_coord][y_coord][z_coord] += np.random.normal(0, noisy)
+                self.y_dict[y_coord][z_coord][x_coord] += np.random.normal(0, noisy)
+                self.z_dict[z_coord][x_coord][y_coord] += np.random.normal(0, noisy)
+                self.entries_arr[3, i] += np.random.normal(0, noisy)
+                i += 1
                 
                 
         #Initialize starting V_x, V_y, V_z
@@ -175,7 +179,8 @@ class Tensor_completion(object):
     def T(self, i,j,k, coeffs, x_vecs, y_vecs, z_vecs):
         """Evaluate tensor given coordinates"""
         ans = 0
-        for a in range(self.rank):
+        rank = len(x_vecs)
+        for a in range(rank):
             ans += coeffs[a] * x_vecs[a][i] * y_vecs[a][j] * z_vecs[a][k]
         return ans
 
@@ -280,7 +285,9 @@ class LM_completion(Tensor_completion):
             z = int(test_entries[2, i])
             part = np.tensordot(V_x[x], V_y[y], axes = 0).flatten()
             feature = np.tensordot(part, V_z[z], axes = 0).flatten()
-            prediction = np.clip(np.dot(feature, solution_coeffs), 0, 256)
+            prediction = np.dot(feature, solution_coeffs)
+            if self.is_clip:
+                prediction = np.clip(prediction, 0, 256)
             true_val = test_entries[3, i] 
             total_norm += np.square(true_val)
             total_error += np.square(prediction - true_val)
@@ -325,7 +332,9 @@ class LM_completion(Tensor_completion):
             part = np.tensordot(V_x[x], V_y[y], axes = 0).flatten()
             feature = np.tensordot(part, V_z[z], axes = 0).flatten()
             pred[i] = np.dot(feature, solution_coeffs)
-        return np.clip(pred, 0, 256)
+        if self.is_clip:
+            pred = np.clip(pred, 0, 256)
+        return pred
     
     @staticmethod
     def get_coeffs(V_x, V_y, V_z, x_dict, n):
@@ -351,7 +360,7 @@ class LM_completion(Tensor_completion):
         return solution_coeffs
     
     @staticmethod
-    def recover_frame(idx_frame, sol_coeffs, V_x, V_y, V_z):
+    def recover_frame(idx_frame, sol_coeffs, V_x, V_y, V_z, is_clip):
         nx, ny, nz = V_x.shape[0], V_y.shape[0], V_z.shape[0]
         pred = np.empty((ny, nz), dtype=np.float32)
         for i in range(ny):
@@ -359,7 +368,9 @@ class LM_completion(Tensor_completion):
                 part = np.tensordot(V_x[idx_frame], V_y[i], axes = 0).flatten()
                 feature = np.tensordot(part, V_z[j], axes = 0).flatten()
                 pred[i, j] = np.dot(feature, sol_coeffs)
-        return pred.clip(0, 256)
+        if is_clip:
+            pred = np.clip(pred, 0, 256)
+        return pred
 
     def fit(
         self, max_iter, test_entries, 
@@ -409,17 +420,17 @@ class LM_completion(Tensor_completion):
                     val_errors = self.eval_error_subspace(V_x,V_y,V_z, x_dict, val_entries)
                     val_error = val_errors[0]
                     val_logs = {
-                        f"val rse":val_errors[0],
-                        f"val mse":val_errors[1],
-                        f"val rmse":val_errors[2],
-                        f"val psnr":val_errors[3],
+                        "val rse":val_errors[0],
+                        "val mse":val_errors[1],
+                        "val rmse":val_errors[2],
+                        "val psnr":val_errors[3],
                     }
                 curr_errors = self.eval_error_subspace(V_x,V_y,V_z, x_dict, test_entries)
                 test_logs = {
-                        f"test rse":curr_errors[0],
-                        f"test mse":curr_errors[1],
-                        f"test rmse":curr_errors[2],
-                        f"test psnr":curr_errors[3],
+                        "test rse":curr_errors[0],
+                        "test mse":curr_errors[1],
+                        "test rmse":curr_errors[2],
+                        "test psnr":curr_errors[3],
                     }
                 cur_error = curr_errors[0]
             
@@ -450,12 +461,11 @@ class LM_completion(Tensor_completion):
         coeffs = self.get_coeffs(V_x, V_y, V_z, x_dict, self.n)
         return V_x, V_y, V_z, coeffs
     
-    @staticmethod
-    def predict(solution, idx_frames):
+    def predict(self, solution, idx_frames):
         V_x, V_y, V_z, coeffs = solution
         recovered_frames = []
         for idx_frame in idx_frames:
-            recovered_frames.append(LM_completion.recover_frame(idx_frame, coeffs, V_x, V_y, V_z))
+            recovered_frames.append(LM_completion.recover_frame(idx_frame, coeffs, V_x, V_y, V_z, is_clip=self.is_clip))
         return recovered_frames
                                 
 
@@ -496,7 +506,7 @@ class ALS_NN(Tensor_completion):
                 Z[i] = Z[i]*np.sqrt(norm_x/norm_yz)
         return (X, Y, Z)
     
-    def eval_error_direct_fast(X, Y, Z, n, m, entries):
+    def eval_error_direct_fast(X, Y, Z, n, m, entries, is_clip):
         nx, ny, nz = n
         total_error = 0
         total_norm = 0
@@ -509,7 +519,10 @@ class ALS_NN(Tensor_completion):
         tmp = Y[m_arr[np.newaxis, :], (entries_i[1])[:, np.newaxis]]* \
                 X[m_arr[np.newaxis, :], (entries_i[0])[:, np.newaxis]]* \
                        Z[m_arr[np.newaxis, :], (entries_i[2])[:, np.newaxis]]
-        error = ent + np.clip(np.sum(tmp, axis = 1), 0, 256)
+        pred = np.sum(tmp, axis=1)
+        if is_clip:
+            pred = np.clip(pred, 0, 256)
+        error = ent + pred
         total_error = np.sqrt(np.sum(error**2))
         total_norm = np.sqrt(np.sum(entries[3]**2))
         
@@ -631,7 +644,8 @@ class ALS_NN(Tensor_completion):
         val_entries=None, threshold=1e-6,
         inplace=False, mu=1.0,
         tau=0.1, max_global_iter=30, 
-        max_iter=1000, logger=None, lam=1.0
+        max_iter=1000, logger=None, lam=1.0,
+        fix_mu=False, momentum=None
     ):
         nx, ny, nz = self.n
         m = self.rank
@@ -678,9 +692,13 @@ class ALS_NN(Tensor_completion):
                 small_step+=1
                 
                 #Compute errors
-                test_rse, test_mse, test_rmse, test_psnr = ALS_NN.eval_error_direct_fast(X, Y, Z, n, m, test_entries)
+                test_rse, test_mse, test_rmse, test_psnr = ALS_NN.eval_error_direct_fast(
+                    X, Y, Z, n, m, test_entries, is_clip=self.is_clip
+                )
                 if val_entries is not None:
-                    val_rse, val_mse, val_rmse, val_psnr = ALS_NN.eval_error_direct_fast(X, Y, Z, n, m, val_entries)
+                    val_rse, val_mse, val_rmse, val_psnr = ALS_NN.eval_error_direct_fast(
+                        X, Y, Z, n, m, val_entries, is_clip=self.is_clip
+                    )
                 
                 execution_time += elapsed()
                 logs = {
@@ -731,6 +749,9 @@ class ALS_NN(Tensor_completion):
                 mu = mu * tau
                 power = 1
                 global_iter += 1
+            
+            if fix_mu:
+                mu = max(mu, 0.001)
             nu = coef * mu**(0.1 + 0.2*power)
             
         return X_best, Y_best, Z_best
@@ -741,7 +762,8 @@ class ALS_NN(Tensor_completion):
         val_entries=None, threshold=1e-6,
         inplace=False, mu=1.0,
         tau=0.1, max_global_iter=30, 
-        max_iter=1000, logger=None, lam=1.0
+        max_iter=1000, logger=None, lam=1.0,
+        fix_mu=False, momentum=None
     ):
         nx, ny, nz = self.n
         n = self.n
@@ -790,9 +812,13 @@ class ALS_NN(Tensor_completion):
                 new_progress = score - new_score
                 score = new_score
                 small_step += 1
-                test_rse, test_mse, test_rmse, test_psnr = ALS_NN.eval_error_direct_fast(X, Y, Z, n, m, test_entries)
+                test_rse, test_mse, test_rmse, test_psnr = ALS_NN.eval_error_direct_fast(
+                    X, Y, Z, n, m, test_entries, is_clip=self.is_clip
+                )
                 if val_entries is not None:
-                    val_rse, val_mse, val_rmse, val_psnr = ALS_NN.eval_error_direct_fast(X, Y, Z, n, m, val_entries)
+                    val_rse, val_mse, val_rmse, val_psnr = ALS_NN.eval_error_direct_fast(
+                        X, Y, Z, n, m, val_entries, is_clip=self.is_clip
+                    )
                 
                 execution_time += elapsed()
                 logs = {
@@ -836,8 +862,12 @@ class ALS_NN(Tensor_completion):
                 if (lam>0.0):
                     u = u_new
                     power += 1
-            else: 
-                mu = 0.5*err_obs/(nuc_norm*(global_iter+1)**1.3)
+            else:
+                mu_new = 0.5*err_obs/(nuc_norm*(global_iter+1)**1.3)
+                if momentum is not None:
+                    mu = momentum*mu_new + (1-momentum)*mu 
+                if fix_mu:
+                    mu = max(mu_new, 0.001)
                 power = 1
                 global_iter += 1
                 nu = err*5
@@ -850,7 +880,8 @@ class ALS_NN(Tensor_completion):
         inplace=False, mu=1.0,
         tau=0.1, max_global_iter=30, 
         max_iter=1000, logger=None, lam=1.0,
-        which_alg="balanced", **kwargs
+        which_alg="balanced", fix_mu=False,
+        momentum=None, **kwargs
     ):
         res = None
         if which_alg=="balanced":
@@ -860,7 +891,8 @@ class ALS_NN(Tensor_completion):
                 inplace=inplace, mu=mu, tau=tau,
                 max_global_iter=max_global_iter,
                 max_iter=max_iter,
-                logger=logger, lam=lam
+                logger=logger, lam=lam,
+                fix_mu=fix_mu, momentum=momentum
             )
         elif which_alg=="vanilla":
             res = self.run_minimization(
@@ -873,15 +905,17 @@ class ALS_NN(Tensor_completion):
             )
         return res
     
-    @staticmethod
-    def predict(solution, idx_frames):
+    def predict(self, solution, idx_frames):
         X, Y, Z = solution
         ny = Y.shape[1]
         nz = Z.shape[1]
         rank = Y.shape[0]
-        tensor = np.zeros(len(idx_frames) * ny * nz)
+        frames = np.zeros(len(idx_frames) * ny * nz)
         for i in range(rank):
             tmp = np.kron(Y[i], Z[i])
-            tensor += np.kron(X[i][idx_frames], tmp)
+            frames += np.kron(X[i][idx_frames], tmp)
         
-        return np.clip(tensor.reshape(len(idx_frames), ny, nz), 0, 256)
+        if self.is_clip:
+            frames = np.clip(frames, 0, 256)
+        
+        return frames.reshape(len(idx_frames), ny, nz)

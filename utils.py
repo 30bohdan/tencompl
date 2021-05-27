@@ -3,6 +3,7 @@ import random, functools, itertools
 import cv2
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def read_yuv2rgb(height, width, n_frames, file_name, file_dir=""):
@@ -84,3 +85,50 @@ def orthonormalize(v, inplace=False):
             v_new[i] = v_new[i] - np.dot(v_new[i], v_new[j])*v_new[j]
         v_new[i] = normalize(v_new[i])
     return v_new
+
+
+def compute_rse(pred, target, entries=None):
+    if entries is not None:
+        new_pred = pred[entries[0].astype(np.int), entries[1].astype(np.int), entries[2].astype(np.int)]
+        new_target = target[entries[0].astype(np.int), entries[1].astype(np.int), entries[2].astype(np.int)]
+    else:
+        new_pred = pred
+        new_target = target
+    error = np.linalg.norm(new_pred-new_target) / np.linalg.norm(new_target)
+    return error
+
+
+class Logger():
+    
+    def __init__(self):
+        self.logs = {}
+        
+    def logs(self, log_dict, step=None):
+        for key, value in log_dict:
+            if key not in self.logs:
+                self.logs[key]['x'] = []
+                self.logs[key]['y'] = []
+            self.logs[key]['y'].append(value)
+            if step is not None:
+                idx = step
+            else:
+                idx = self.logs[key]['x'][-1] + 1
+
+            self.logs[key]['x'].append(idx)
+
+    
+    def reset(self, log_name):
+        self.logs[log_name]['x'] = []
+        self.logs[log_name]['y'] = []
+        
+    def plot(self, log_name, title=None, xlabel=None, ylabel=None):
+        title = title or ''
+        xlabel = xlabel or 'step'
+        ylabel = ylabel or log_name
+        plt.title(log_name)
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        y = self.logs[log_name]['y']
+        x = self.logs[log_name]['x']
+        plt.plot(x, y)
+        plt.show()

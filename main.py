@@ -1,19 +1,10 @@
-import sys, os, time
-import random, math
+import random
 import fire
 
 import numpy as np
-import matplotlib.pyplot as plt
-from sklearn import decomposition
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-
 import wandb
 
-from utils import elapsed, get_tensor_entries
+from utils import get_tensor_entries
 import config
 from config import experiment_configs
 
@@ -36,6 +27,8 @@ def main(experiment="experiment1", seed=13):
     dim_z = experiment_config["dim_z"]
     
     lambda_ = experiment_config.get("lambda", None)
+    fix_mu = experiment_config.get("fix_mu", False)
+    momentum = experiment_config.get("momentum", None)
     n_val_entries = experiment_config["n_val_entries"]
     n_test_entries = experiment_config["n_test_entries"]
     predict_frames = experiment_config["predict_frames"]
@@ -76,6 +69,8 @@ def main(experiment="experiment1", seed=13):
                         "predict_frames": predict_frames,
                         "noisy": noisy,
                         "randominit": randominit,
+                        "fix_mu": fix_mu,
+                        "momentum": momentum,
                     }
                     group_name = f"Dim-{dim_x}x{dim_y}x{dim_z} dataset-{dataset_name} rank-{rank} portion-{portion}"
                     if dataset is None:
@@ -108,15 +103,18 @@ def main(experiment="experiment1", seed=13):
                         test_entries=test_entries,
                         val_entries=val_entries,
                         logger=logger, max_iter=max_iter,
-                        lam=lambda_
+                        lam=lambda_, fix_mu=fix_mu,
+                        momentum=momentum
                     )
 
                     pred = solver.predict(solution, predict_frames)
                     images = []
                     for image, idx_frame in zip(pred, predict_frames):
-                        images.append(wandb.Image(image, caption=f"Frame #{idx_frame}; method: {method}; rank: {rank}; protion:{portion};"))
+                        images.append(
+                            wandb.Image(
+                                image, caption=f"Frame #{idx_frame}; method: {method}; rank: {rank}; portion:{portion};"))
                     logger.log({"Visualize prediction:": images})
-                logger.finish()
+                    logger.finish()
 
 
 if __name__=="__main__":
