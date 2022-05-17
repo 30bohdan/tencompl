@@ -474,7 +474,7 @@ pyten_configs = {
         "dataset": "akiyo",
         "ranks": [(20, None)],
         "portions": [0.05],
-        "init": ["eigs"],
+        "init": "eigs",
         "n_frames": [70],
         "dim_y": 144,
         "dim_z": 176,

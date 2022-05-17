@@ -13,7 +13,7 @@ from pyten.tenclass import Tensor
 
 import pdb
 
-def train(experiment="pyten_target1", seed=13):
+def train(experiment="target1", seed=13):
     pyten_config = pyten_configs[experiment]
     
     dataset_name = pyten_config["dataset"]
@@ -79,29 +79,29 @@ def train(experiment="pyten_target1", seed=13):
                 # CP ALS
                 X = Tensor(data_observed.copy())
                 [T1, rX1] = cp_als(X, rank, Omega, maxiter=max_iter, init=init)
-                cp_als_rse = compute_rse(rX1.data, dataset, Omega)
+                cp_als_rse, cp_als_mse, cp_als_rmse, cp_als_psnr = compute_rse(rX1.data, dataset, Omega)q()
 
                 # Tucker ALS
                 X = Tensor(data_observed.copy())
                 pdb.set_trace()
                 [T2, rX2] = tucker_als(X, R, Omega, max_iter=max_iter, init=init)
-                tucker_als_rse = compute_rse(rX2.data, dataset, test_entries)
+                tucker_als_rse, tucker_als_mse, tucker_als_rmse, tucker_als_psnr = compute_metrics(rX2.data, dataset, test_entries)
 
                 # Silrtc
                 X = Tensor(data_observed.copy())
                 rX3 = silrtc(X, Omega, max_iter=max_iter)
-                silrtc_rse = compute_rse(rX3.data, dataset, test_entries)
+                silrtc_rse, silrtc_mse, silrtc_rmse, silrtc_psnr = compute_metrics(rX3.data, dataset, test_entries)
 
                 # Halrtc
                 X = Tensor(data_observed.copy())
                 rX4 = halrtc(X, Omega, max_iter=max_iter)
-                halrtc_rse = compute_rse(rX4.data, dataset, test_entries)
+                halrtc_rse, halrtc_mse, halrtc_rmse, halrtc_psnr = compute_metrics(rX4.data, dataset, test_entries)
 
                 # TNCP
                 X = Tensor(data_observed.copy())
                 solver = TNCP(X, Omega, rank=rank, max_iter=max_iter)
                 solver.run()
-                tncp_rse = compute_rse(solver.X.data, dataset, test_entries)
+                tncp_rse, tncp_mse, tncp_rmse, tncp_psnr = compute_metrics(solver.X.data, dataset, test_entries)
 
                 columns = ["Init", "CP ALS", "Tucker ALS", "Silrtc", "Halrtc", "TNCP"]
                 table = wandb.Table(columns=columns)
