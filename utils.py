@@ -98,6 +98,23 @@ def compute_rse(pred, target, entries=None):
     return error
 
 
+def compute_metrics(pred, target, test_entries):
+    num_test_entries = test_entries.shape[1]
+    
+    new_pred = pred[test_entries[0].astype(np.int), test_entries[1].astype(np.int), test_entries[2].astype(np.int)]
+    new_target = target[test_entries[0].astype(np.int), test_entries[1].astype(np.int), test_entries[2].astype(np.int)]
+    
+    total_error = np.linalg.norm(new_target-new_pred)
+    total_norm = np.linalg.norm(new_target)
+    
+    rse = total_error / total_norm
+    mse = total_error**2 / num_test_entries
+    rmse = total_error / np.sqrt(num_test_entries)
+    psnr = 20*np.log10(np.max(np.abs(new_target))) - 10*np.log10(mse)
+    
+    return rse, mse, rmse, psnr
+
+
 class Logger():
     
     def __init__(self):
