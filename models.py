@@ -25,7 +25,7 @@ class Tensor_completion(object):
         y_vecs=None, z_vecs=None,
         coeffs=None, correlated=False,
         entries_arr=None, noisy=None,
-        randominit=True, seed=2021,
+        randominit=True, seed=None,
         true_rank=None, is_clip=True
     ): 
         random.seed(seed)
@@ -471,7 +471,6 @@ class LM_completion(Tensor_completion):
 
 class ALS_NN(Tensor_completion):
     
-    @staticmethod
     def aul_f_sp(X, Y, Z, n, m, u, mu, entries = None):
         """Computes the value of a score function 
         ||x||^2+||y||^2||z||^2 - u*(T - T_rec)_omega+(1/(2*mu))*||T - T_rec||^2
@@ -493,7 +492,6 @@ class ALS_NN(Tensor_completion):
         val = val_n + np.sum( (1/(2*mu))* ent**2-u*ent)        
         return (val, np.sqrt(np.sum(ent**2)), val_n/2)
     
-    @staticmethod
     def fix_components(X, Y, Z, n, m):
         """
         Scales the components so that ||X_i|| = ||Y_i||*||Z_i||
@@ -508,7 +506,6 @@ class ALS_NN(Tensor_completion):
                 Z[i] = Z[i]*np.sqrt(norm_x/norm_yz)
         return (X, Y, Z)
     
-    @staticmethod
     def eval_error_direct_fast(X, Y, Z, n, m, entries, is_clip):
         nx, ny, nz = n
         total_error = 0
@@ -536,7 +533,6 @@ class ALS_NN(Tensor_completion):
         
         return rse, mse, rmse, psnr
     
-    @staticmethod
     def reg_fast_update_x(X, Y, Z, n, m, u, mu, entries_a, num_entries, lam = 1.0):
         entries = np.asarray(entries_a[:3, :], dtype = int)
         entries_val = entries_a[3]
@@ -566,7 +562,6 @@ class ALS_NN(Tensor_completion):
         X = XT.T
         return X
     
-    @staticmethod
     def reg_fast_update_y(X, Y, Z, n, m, u, mu, entries_a, num_entries, lam = 1.0):
         entries = np.asarray(entries_a[:3, :], dtype = int)
         entries_val = entries_a[3]
@@ -598,7 +593,6 @@ class ALS_NN(Tensor_completion):
         Y = YT.T
         return Y
     
-    @staticmethod
     def reg_fast_update_z(X, Y, Z, n, m, u, mu, entries_a, num_entries, lam = 1.0):
         entries = np.asarray(entries_a[:3, :], dtype = int)
         entries_val = entries_a[3]
@@ -630,7 +624,6 @@ class ALS_NN(Tensor_completion):
         Z = ZT.T
         return Z
     
-    @staticmethod
     def compute_adjust_sp(X, Y, Z, n, m, mu, u, entries_a):
         """Adjusts u vector for Lagrangian"""
         entries = np.asarray(entries_a[:3, :], dtype = int)
