@@ -35,6 +35,8 @@ def main(experiment="experiment1", seed=13):
     
     dataset_full = config.datasets[dataset_name]
     
+    
+    
     for dim_x in n_frames:
         if dataset_full is not None:
             dataset = dataset_full[:dim_x]
@@ -43,8 +45,10 @@ def main(experiment="experiment1", seed=13):
         for rank, true_rank in ranks:
             for portion in portions:
                 for method in methods:
+                    # Set seeds
                     np.random.seed(seed)
                     random.seed(seed)
+                    
                     if method=="ALS":
                         lambda_ = 0
                     else:
@@ -71,10 +75,12 @@ def main(experiment="experiment1", seed=13):
                         "randominit": randominit,
                         "fix_mu": fix_mu,
                         "momentum": momentum,
+                        "seed": seed,
+                        "stage": "final"
                     }
-                    group_name = f"Dim-{dim_x}x{dim_y}x{dim_z} dataset-{dataset_name} rank-{rank} portion-{portion}"
+                    group_name = "Dim-{}x{}x{} dataset-{} rank-{} portion-{}".format(dim_x, dim_y, dim_z, dataset_name, rank, portion)
                     if dataset is None:
-                        group_name += f" true_rank-{true_rank}"
+                        group_name += " true_rank-{}".format(true_rank)
                     logger = wandb.init(project='tensor-completion', entity='ykivva', group=group_name, reinit=True)
                     logger.config.update(wandb_configs)
                     run_name =  "method: {}; randinit:{}; noisy:{}".format(
@@ -92,7 +98,8 @@ def main(experiment="experiment1", seed=13):
                     solver = solver(
                         n=n, rank=rank, n_entries=n_entries,
                         entries_arr=entries_arr, noisy=noisy,
-                        randominit=randominit, true_rank=true_rank, seed=seed
+                        randominit=randominit, true_rank=true_rank,
+                        seed=seed
                     )
                     
                     if dataset is None:
@@ -112,7 +119,7 @@ def main(experiment="experiment1", seed=13):
                     for image, idx_frame in zip(pred, predict_frames):
                         images.append(
                             wandb.Image(
-                                image, caption=f"Frame #{idx_frame}; method: {method}; rank: {rank}; portion:{portion};"))
+                                image, caption="Frame #{}; method: {}; rank: {}; portion:{};".format(idx_frame, method, rank, portion)))
                     logger.log({"Visualize prediction:": images})
                     logger.finish()
 
