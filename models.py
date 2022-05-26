@@ -767,8 +767,8 @@ class ALS_NN(Tensor_completion):
         self, test_entries, 
         val_entries=None, threshold=1e-6,
         inplace=False, mu=1.0,
-        tau=0.1, max_global_iter=30, 
-        max_iter=1000, logger=None, lam=1.0,
+        tau=0.1, max_global_iter=100, 
+        max_iter=100, logger=None, lam=1.0,
         fix_mu=False, momentum=None
     ):
         nx, ny, nz = self.n
@@ -785,7 +785,7 @@ class ALS_NN(Tensor_completion):
         Z_best = Z
         best_error = 100
         
-        mu = mu
+        mu_old = mu
         nu = 1.0
         
         global_iter = 0
@@ -796,7 +796,7 @@ class ALS_NN(Tensor_completion):
         u  = np.zeros(num_entries)
         entries_a = self.entries_arr
         execution_time = 0
-        
+        counter = 0
         while global_iter<max_global_iter and it<max_iter:
             score, nuc_norm, err_obs = ALS_NN.aul_f_sp(X, Y, Z, n, m, u, mu, entries = entries_a)
             nu = err_obs / 1.5
@@ -849,6 +849,10 @@ class ALS_NN(Tensor_completion):
                         X_best = np.copy(X)
                         Y_best = np.copy(Y)
                         Z_best = np.copy(Z)
+                else:
+                    X_best = np.copy(X)
+                    Y_best = np.copy(Y)
+                    Z_best = np.copy(Z)
                 
                 if logger is not None:
                     logger.log(logs, step=it)
@@ -862,35 +866,53 @@ class ALS_NN(Tensor_completion):
                         )
                     )
                 )
+                
+                mu_new = 0.5*err_obs/(nuc_norm*(global_iter+1)**1.3)
+                # print(f"here: {mu_new}")
+                if momentum is not None:
+                    mu = min((1-momentum)*mu_new + momentum*mu, mu)
+                if (it>max_iter/2 and mu>1e-4):
+                    mu = 1e-4
+                
+                mu = max(mu, 1e-8)
+                
             #update u and mu
             u_new, err = ALS_NN.compute_adjust_sp(X, Y, Z, n, m, mu, u, entries_a)
+            # print(f"nErr: {err}\n")
+            # print(f"max u_new: {max(u_new)}")
+            # print(f"min u_new: {min(u_new)}")
+            counter += 1
             if (err_obs > nu) and (power<6):
                 if (lam>0.0):
                     u = u_new
                     power += 1
             else:
-                mu_new = 0.5*err_obs/(nuc_norm*(global_iter+1)**1.3)
                 if momentum is not None:
-                    mu = momentum*mu_new + (1-momentum)*mu 
+                    mu = min((1-momentum)*mu_new + momentum*mu, mu)
                 if fix_mu:
                     mu = max(mu_new, 0.001)
                 power = 1
                 global_iter += 1
                 nu = err*5
-
+            if counter >= 5:
+                counter = 0
+                mu *= 0.1
+            mu = max(mu, 1e-8)
+            # print(f"mu: {mu}")
         return X_best, Y_best, Z_best
     
     def fit(
         self, test_entries, 
         val_entries=None, threshold=1e-6,
         inplace=False, mu=1.0,
-        tau=0.1, max_global_iter=30, 
-        max_iter=1000, logger=None, lam=1.0,
+        tau=0.1, max_global_iter=100, 
+        max_iter=100, logger=None, lam=1.0,
         which_alg="balanced", fix_mu=False,
-        momentum=None, **kwargs
+        momentum=0.9, **kwargs
     ):
         res = None
         if which_alg=="balanced":
+            # print("This")
             res = self.run_min_balanced(
                 test_entries=test_entries, val_entries=val_entries, 
                 threshold=threshold,
